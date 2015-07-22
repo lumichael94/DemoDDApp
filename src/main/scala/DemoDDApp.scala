@@ -2,6 +2,7 @@ import org.apache.spark._
 import com.datastax.spark.connector._
 import java.security.MessageDigest
 import scala.util.hashing.MurmurHash3
+import org.apache.spark.rdd.RDD
 
 case class intermed(uuid: String, hash: Int)
 
@@ -31,28 +32,34 @@ object DemoDDApp{
     arrayHash(arr, seed) 
   }
 
+  def randToMid(rdd: RDD[CassandraRow]): RDD[intermed]={
+    val middle1 = rdd.map{r =>
+      intermed(r.get[String]("hash"), computeRow(r))
+    }
+    return middle1
+  }
+
   def main(args: Array[String]): Unit = {
 
     val conf = new SparkConf().setAppName("DemoDDApp")
 
     val sc = new SparkContext(conf)
     
-    val md = MessageDigest.getInstance("MD5")
     //Create RDD from table
     val random1 = sc.cassandraTable("test", "random1")
-    //val table2 = sc.cassandraTable[(String, String)]("test", "random2")
-    //val table3 = sc.cassandraTable[(String, String)]("test", "random3")
-    //val table4 = sc.cassandraTable[(String, String)]("test", "random4")
+    val random2 = sc.cassandraTable("test", "random2")
+    val random3 = sc.cassandraTable("test", "random3")
+    val random4 = sc.cassandraTable("test", "random4")
 
     //Iterate through the rows.
     //Apply the hashing function, map UUID to new hash
     //Save to new RDD
-    val middle1 = random1.map{r =>
-      intermed(r.get[String]("hash"), computeRow(r))
-    }
+    val middle1 = randToMid(random1)
+    val middle2 = randToMid(random2)
+    val middle3 = randToMid(random1)
+    val middle4 = randToMid(random1)
 
-    middle1.saveAsCassandraTable("test", "middle1", SomeColumns("uuid", "hash"))
-
+    
 
     sc.stop;
 
