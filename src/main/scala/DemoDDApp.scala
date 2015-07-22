@@ -4,7 +4,8 @@ import java.security.MessageDigest
 import scala.util.hashing.MurmurHash3
 import org.apache.spark.rdd.RDD
 
-case class intermed(uuid: String, hash: Int)
+case class intermed(uuid: String, hash: Int) 
+case class finalTable(uuid: String, hash: Int)
 
 object DemoDDApp{
 
@@ -32,13 +33,59 @@ object DemoDDApp{
     arrayHash(arr, seed) 
   }
 
-  def randToMid(rdd: RDD[CassandraRow]): RDD[intermed]={
-    val middle1 = rdd.map{r =>
-      intermed(r.get[String]("hash"), computeRow(r))
+  def randToMid(rdd: RDD[CassandraRow]): RDD[CassandraRow]={
+    val middle = rdd.map{r =>
+      val uuid = r.get[String]("hash")
+      val hash = computeRow(r)
+      CassandraRow.fromMap(Map("uuid" -> uuid, "hash" -> hash))
     }
-    return middle1
+    return middle
   }
 
+  //Yeah...this is just a reduce function. Rewriting
+  def combineTwo(rdd1: RDD[CassandraRow], rdd2: RDD[CassandraRow]): RDD[CassandraRow]={
+    
+    val finale = rdd1.flatMap{r1 =>
+        rdd2.map{r2 => 
+        val row1UUID= r1.get[String]("uuid")
+        val row2UUID= r2.get[String]("uuid")
+        val row1Hash= r1.get[Int]("hash")
+        val row2Hash= r1.get[Int]("hash")
+
+        val hash1 = stringHash(row1UUID, row2Hash)
+        
+        val uuid = Integer.toHexString(hash1)
+        val hash = stringHash(row2UUID, row1Hash)
+        CassandraRow.fromMap(Map("uuid" -> uuid, "hash" -> hash))
+      }.collect
+    }
+    return finale;
+  }
+  //def zap((rdd1: RDD[CassandraRow], rdd2: RDD[CassandraRow]): RDD[CassandraRow]={
+  //  val rdd1Arr = rdd1.collect;
+  //  val rdd2Arr = rdd2.collect;
+  //  for (val i = 0; i < rdd1.count; i++){
+  //    rdd2.
+  //  }
+  //}
+  //Actual reduce
+  def reduceTwo(rdd1: RDD[CassandraRow], rdd2: RDD[CassandraRow]): RDD[CassandraRow]={
+    val zip = rdd1.zip(rdd2)
+    //val asdf = zip.get[String]("uuid")
+    val response = zip.map{x =>
+        val row1UUID= x._1.get[String]("uuid")
+        val row2UUID= x._2.get[String]("uuid")
+        val row1Hash= x._1.get[Int]("hash")
+        val row2Hash= x._2.get[Int]("hash")
+
+        val hash1 = stringHash(row1UUID, row2Hash)
+        
+        val uuid = Integer.toHexString(hash1)
+        val hash = stringHash(row2UUID, row1Hash)
+        CassandraRow.fromMap(Map("uuid" -> uuid, "hash" -> hash))
+    }
+    return response
+  }
   def main(args: Array[String]): Unit = {
 
     val conf = new SparkConf().setAppName("DemoDDApp")
@@ -56,12 +103,22 @@ object DemoDDApp{
     //Save to new RDD
     val middle1 = randToMid(random1)
     val middle2 = randToMid(random2)
-    val middle3 = randToMid(random1)
-    val middle4 = randToMid(random1)
+    val middle3 = randToMid(random3)
+    val middle4 = randToMid(random4)
 
-    
+    val final1 = reduceTwo(middle1, middle3)
+    val final2 = reduceTwo(middle1, middle3)
 
-    sc.stop;
+    val finalRDD = reduceTwo(final1, final2)
+
+    val finalRow = finalRDD.collect.map{row =>
+      val x = row.get[String]("uuid") 
+      val y = row.get[Int]("hash") 
+      stringHash(x,y)
+    }
+    val finalHash = MurmurHash3.arrayHash(finalRow) 
+    println("\n\n\nThe hash is: " + finalHash + "\n\n\n")
+    sc.stop
 
   }
 }
