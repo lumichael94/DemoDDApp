@@ -61,16 +61,18 @@ object DemoDDApp{
     }
     return finale;
   }
-  //def zap((rdd1: RDD[CassandraRow], rdd2: RDD[CassandraRow]): RDD[CassandraRow]={
-  //  val rdd1Arr = rdd1.collect;
-  //  val rdd2Arr = rdd2.collect;
-  //  for (val i = 0; i < rdd1.count; i++){
-  //    rdd2.
-  //  }
-  //}
+  def zap(rdd1: RDD[CassandraRow], rdd2: RDD[CassandraRow]): RDD[(CassandraRow, CassandraRow)]={
+
+    val indexedRDD1 = rdd1.zipWithIndex.map { case (v, i) => i -> v }
+    val indexedRDD2 = rdd2.zipWithIndex.map { case (v, i) => i -> v }
+    val combined = indexedRDD1.leftOuterJoin(indexedRDD2).map {
+      case (i, (v1, Some(v2))) =>  (v1, v2)
+    }
+    return combined
+  }
   //Actual reduce
   def reduceTwo(rdd1: RDD[CassandraRow], rdd2: RDD[CassandraRow]): RDD[CassandraRow]={
-    val zip = rdd1.zip(rdd2)
+    val zip = zap(rdd1, rdd2)
     //val asdf = zip.get[String]("uuid")
     val response = zip.map{x =>
         val row1UUID= x._1.get[String]("uuid")
@@ -106,8 +108,9 @@ object DemoDDApp{
     val middle3 = randToMid(random3)
     val middle4 = randToMid(random4)
 
+
     val final1 = reduceTwo(middle1, middle3)
-    val final2 = reduceTwo(middle1, middle3)
+    val final2 = reduceTwo(middle2, middle4)
 
     val finalRDD = reduceTwo(final1, final2)
 
